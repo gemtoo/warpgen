@@ -18,7 +18,12 @@ services:
       - "traefik.http.routers.warpgen-rs.entrypoints=websecure"
       - "traefik.http.routers.warpgen-rs.tls.certResolver=letsencrypt"
       - "traefik.http.services.warpgen-rs.loadbalancer.server.port=3000"
-
+      # Allow 1 request per 24 hours so that noisy scanners can fuck off
+      - "traefik.http.middlewares.warpgen-ratelimit.ratelimit.average=1"
+      - "traefik.http.middlewares.warpgen-ratelimit.ratelimit.period=24h"
+      - "traefik.http.middlewares.warpgen-ratelimit.ratelimit.burst=0"
+      - "traefik.http.middlewares.warpgen-ratelimit.ratelimit.sourcecriterion.ipstrategy=true"
+      - "traefik.http.routers.warpgen-rs.middlewares=warpgen-ratelimit"
 networks:
   default:
     name: web
