@@ -1,0 +1,20 @@
+services:
+  warpgen:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: warpgen
+    hostname: warpgen
+    cap_drop:
+      - ALL
+    restart: always
+    stop_grace_period: 0s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.warpgen-rs.rule=Host(`wg.gemtoo.dev`)"
+      - "traefik.http.routers.warpgen-rs.service=warpgen-rs"
+      - "traefik.http.routers.warpgen-rs.priority=1000"
+      - "traefik.http.routers.warpgen-rs.entrypoints=web"
+      - "traefik.http.routers.warpgen-rs.entrypoints=websecure"
+      - "traefik.http.routers.warpgen-rs.tls.certResolver=letsencrypt"
+      - "traefik.http.services.warpgen-rs.loadbalancer.server.port=3000"
