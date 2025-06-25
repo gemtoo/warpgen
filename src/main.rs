@@ -10,7 +10,7 @@ use tokio::net::TcpListener;
 
 async fn root() -> impl IntoResponse {
     info!("Handling / request ...");
-    let contents = warp::generate().await;
+    let contents = warp::generate().await.unwrap();
     
     // Set headers to trigger file download
     let mut headers = HeaderMap::new();

@@ -45,41 +45,7 @@ struct Endpoint {
     host: String,
 }
 
-pub async fn generate() -> String {
-    let json = fetch_json().await.unwrap();
-    return generate_config_string(&json).unwrap();
-}
-
-fn generate_config_string(json_str: &str) -> Result<String, Box<dyn Error>> {
-    let response: Response = serde_json::from_str(json_str)?;
-    
-    let private_key = response.result.key;
-    let address_v4 = response.result.config.interface.addresses.v4;
-    let address_v6 = response.result.config.interface.addresses.v6;
-    
-    let peer = response.result.config.peers.first()
-        .ok_or("No peers found in configuration")?;
-    let public_key = &peer.public_key;
-    let endpoint = &peer.endpoint.host;
-
-    let mut output = String::new();
-    
-    // Interface section
-    writeln!(&mut output, "[Interface]")?;
-    writeln!(&mut output, "PrivateKey = {}", private_key)?;
-    writeln!(&mut output, "Address = {}, {}", address_v4, address_v6)?;
-    writeln!(&mut output, "DNS = 1.1.1.1, 2606:4700:4700::1111, 1.0.0.1, 2606:4700:4700::1001")?;
-    
-    // Peer section
-    writeln!(&mut output, "\n[Peer]")?;
-    writeln!(&mut output, "PublicKey = {}", public_key)?;
-    writeln!(&mut output, "AllowedIPs = 0.0.0.0/0, ::/0")?;
-    writeln!(&mut output, "Endpoint = {}", endpoint)?;
-    
-    Ok(output)
-}
-
-async fn fetch_json() -> Result<String, Box<dyn std::error::Error>> {
+pub async fn generate() -> Result<String, Box<dyn std::error::Error>> {
     info!("Generating new WireGuard keys");
     let privkey = wireguard_keys::Privkey::generate().to_base64();
     debug!("Generated private key: {}", privkey);
@@ -127,11 +93,36 @@ async fn fetch_json() -> Result<String, Box<dyn std::error::Error>> {
 
     // Output response
     let status = response.status();
-    let body = response.text().await?;
+    let json_body = response.text().await?;
     info!(%status, "Received API response");
-    debug!("Response body: {}", body);
+    debug!("Response body: {}", json_body);
 
-    Ok(body)
+    let response: Response = serde_json::from_str(&json_body)?;
+    
+    let private_key = privkey;
+    let address_v4 = response.result.config.interface.addresses.v4;
+    let address_v6 = response.result.config.interface.addresses.v6;
+    
+    let peer = response.result.config.peers.first()
+        .ok_or("No peers found in configuration")?;
+    let public_key = &peer.public_key;
+    let endpoint = &peer.endpoint.host;
+
+    let mut output = String::new();
+    
+    // Interface section
+    writeln!(&mut output, "[Interface]")?;
+    writeln!(&mut output, "PrivateKey = {}", private_key)?;
+    writeln!(&mut output, "Address = {}, {}", address_v4, address_v6)?;
+    writeln!(&mut output, "DNS = 1.1.1.1, 2606:4700:4700::1111, 1.0.0.1, 2606:4700:4700::1001")?;
+    
+    // Peer section
+    writeln!(&mut output, "\n[Peer]")?;
+    writeln!(&mut output, "PublicKey = {}", public_key)?;
+    writeln!(&mut output, "AllowedIPs = 0.0.0.0/0, ::/0")?;
+    writeln!(&mut output, "Endpoint = {}", endpoint)?;
+
+    Ok(output)
 }
 
 #[instrument(

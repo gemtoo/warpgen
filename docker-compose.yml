@@ -18,3 +18,8 @@ services:
       - "traefik.http.routers.warpgen-rs.entrypoints=websecure"
       - "traefik.http.routers.warpgen-rs.tls.certResolver=letsencrypt"
       - "traefik.http.services.warpgen-rs.loadbalancer.server.port=3000"
+
+networks:
+  default:
+    name: web
+    external: true
