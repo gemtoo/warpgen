@@ -1,10 +1,7 @@
 mod warp;
-use tracing::{Level, info, span};
+use tracing::{Level, info, debug, span};
 use axum::{
-    response::IntoResponse,
-    routing::get,
-    Router,
-    http::{header, HeaderMap},
+    http::{header, HeaderMap, HeaderValue}, response::IntoResponse, routing::get, Router
 };
 use tokio::net::TcpListener;
 
@@ -18,9 +15,12 @@ async fn root() -> impl IntoResponse {
         header::CONTENT_TYPE,
         "application/octet-stream".parse().unwrap(),
     );
+    let filename = generate_safe_filename(10);
+    debug!("Generated filename: {}", filename);
+    let attachment_header= format!("attachment; filename=\"{}\"", filename).parse::<HeaderValue>().unwrap();
     headers.insert(
         header::CONTENT_DISPOSITION,
-        "attachment; filename=\"warpgen.conf\"".parse().unwrap(),
+        attachment_header,
     );
     
     (headers, contents)
@@ -49,4 +49,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     Ok(())
+}
+
+use rand::Rng;
+
+fn generate_safe_filename(length: usize) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                            abcdefghijklmnopqrstuvwxyz\
+                            0123456789_-";
+    
+    let mut rng = rand::thread_rng();
+    let basename: String = (0..length)
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect();
+    return format!("{}.conf", basename);
 }
