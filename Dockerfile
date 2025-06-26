@@ -1,4 +1,6 @@
-FROM rust:1.87-alpine AS chef
+FROM alpine:3.22 AS base
+
+FROM rust:1.87-alpine3.22 AS chef
 RUN apk add --no-cache openssl-dev ca-certificates pkgconfig musl-dev
 RUN cargo install cargo-chef --locked
 
@@ -15,7 +17,7 @@ COPY . .
 RUN cargo build --release --bin warpgen && \
     rm -rf target/release/deps target/release/build
 
-FROM chef AS warpgen
+FROM base AS warpgen
 COPY --from=builder /app/target/release/warpgen /usr/local/bin/
 
 ENTRYPOINT [ "warpgen" ]
