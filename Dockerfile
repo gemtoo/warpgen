@@ -19,5 +19,4 @@ RUN cargo build --release --bin warpgen && \
 
 FROM base AS warpgen
 COPY --from=builder /app/target/release/warpgen /usr/local/bin/
-
 ENTRYPOINT [ "warpgen" ]
