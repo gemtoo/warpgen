@@ -1,0 +1,41 @@
+stages:
+  - build
+
+get_version:
+  stage: .pre
+  image: 
+    name: alpine/git:v2.49.0
+    entrypoint: [""]
+  script:
+    - DOCKER_IMAGE_HASH_TAG=$(git describe --tags --always)
+    - DOCKER_IMAGE_SEMANTIC_TAG=$(cat Cargo.toml | grep "^version = \".*\"" | sed "s/^version = \"\(.*\)\"/\1/g")
+    - echo "DOCKER_IMAGE_HASH_TAG=${DOCKER_IMAGE_HASH_TAG}" >> build.env
+    - echo "DOCKER_IMAGE_SEMANTIC_TAG=${DOCKER_IMAGE_SEMANTIC_TAG}" >> build.env
+  artifacts:  
+    reports:
+      dotenv: build.env
+
+build_and_save:
+  stage: build
+  image: 
+    name: docker:28.2.2
+    entrypoint: [""]
+  services:
+    - name: docker:28.2.2-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_BUILDKIT: 1
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+  script:
+    - docker buildx create --use --name cibuilder
+    - docker buildx inspect --bootstrap
+    - docker buildx build \
+        --push \
+        --tag ${CI_REGISTRY_IMAGE}:${DOCKER_IMAGE_HASH_TAG} \
+        --tag ${CI_REGISTRY_IMAGE}:${DOCKER_IMAGE_SEMANTIC_TAG} \
+        --tag ${CI_REGISTRY_IMAGE}:latest \
+        --cache-to type=registry,ref=$CI_REGISTRY_IMAGE/cache-image,mode=max \
+        --cache-from=type=registry,ref=$CI_REGISTRY_IMAGE/cache-image .
