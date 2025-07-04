@@ -24,6 +24,7 @@ services:
       - "traefik.http.middlewares.warpgen-ratelimit.ratelimit.burst=0"
       - "traefik.http.middlewares.warpgen-ratelimit.ratelimit.sourcecriterion.ipstrategy=true"
       - "traefik.http.routers.warpgen-rs.middlewares=warpgen-ratelimit"
+
 networks:
   default:
     name: web

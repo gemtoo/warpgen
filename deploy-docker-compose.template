@@ -1,0 +1,19 @@
+services:
+  warpgen-${CI_ENVIRONMENT_NAME}:
+    image: ${CI_REGISTRY_IMAGE}:${DOCKER_IMAGE_SEMANTIC_TAG}
+    restart: always
+    stop_grace_period: 0s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.example.rule=Host(`${DOMAIN_NAME}`)"
+      - "traefik.http.routers.example.service=example"
+      - "traefik.http.routers.example.priority=1000"
+      - "traefik.http.routers.example.entrypoints=web"
+      - "traefik.http.routers.example.entrypoints=websecure"
+      - "traefik.http.routers.example.tls.certResolver=letsencrypt"
+      - "traefik.http.services.example.loadbalancer.server.port=3000"
+
+networks:
+  default:
+    name: web
+    external: true
