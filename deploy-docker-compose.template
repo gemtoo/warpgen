@@ -5,13 +5,18 @@ services:
     stop_grace_period: 0s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.example.rule=Host(`${DOMAIN_NAME}`)"
-      - "traefik.http.routers.example.service=example"
-      - "traefik.http.routers.example.priority=1000"
-      - "traefik.http.routers.example.entrypoints=web"
-      - "traefik.http.routers.example.entrypoints=websecure"
-      - "traefik.http.routers.example.tls.certResolver=letsencrypt"
-      - "traefik.http.services.example.loadbalancer.server.port=3000"
+      - "traefik.http.routers.warpgen-${CI_ENVIRONMENT_NAME}.rule=Host(`${DOMAIN_NAME}`)"
+      - "traefik.http.routers.warpgen-${CI_ENVIRONMENT_NAME}.service=warpgen-${CI_ENVIRONMENT_NAME}"
+      - "traefik.http.routers.warpgen-${CI_ENVIRONMENT_NAME}.priority=1000"
+      - "traefik.http.routers.warpgen-${CI_ENVIRONMENT_NAME}.entrypoints=web"
+      - "traefik.http.routers.warpgen-${CI_ENVIRONMENT_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.warpgen-${CI_ENVIRONMENT_NAME}.tls.certResolver=letsencrypt"
+      - "traefik.http.services.warpgen-${CI_ENVIRONMENT_NAME}.loadbalancer.server.port=3000"
+      # Allow 1 request per 24 hours so that noisy scanners can fuck off
+      - "traefik.http.middlewares.warpgen-ratelimit.ratelimit.average=1"
+      - "traefik.http.middlewares.warpgen-ratelimit.ratelimit.period=24h"
+      - "traefik.http.middlewares.warpgen-ratelimit.ratelimit.burst=0"
+      - "traefik.http.routers.warpgen-${CI_ENVIRONMENT_NAME}.middlewares=warpgen-ratelimit"
 
 networks:
   default:
