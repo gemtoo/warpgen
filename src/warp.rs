@@ -3,8 +3,6 @@ use serde_json::json;
 use tracing::{debug, error, info, instrument};
 
 use serde::Deserialize;
-use std::error::Error;
-use std::fmt::Write;
 
 #[derive(Deserialize)]
 struct Response {
@@ -13,7 +11,6 @@ struct Response {
 
 #[derive(Deserialize)]
 struct ResultData {
-    key: String,
     config: Config,
 }
 
@@ -45,84 +42,110 @@ struct Endpoint {
     host: String,
 }
 
-pub async fn generate() -> Result<String, Box<dyn std::error::Error>> {
-    info!("Generating new WireGuard keys");
-    let privkey = wireguard_keys::Privkey::generate().to_base64();
-    debug!("Generated private key: {}", privkey);
+#[derive(Debug, Default)]
+pub struct WarpConfig {
+    private_key: String,
+    public_key: String,
+    address_v4: String,
+    address_v6: String,
+    peer_public_key: String,
+    endpoint: String,
+}
 
-    let privkey_obj: wireguard_keys::Privkey = privkey.parse().map_err(|e| {
-        error!("Failed to parse private key: {}", e);
-        e
-    })?;
-    let pubkey = privkey_obj.pubkey().to_base64();
-    info!("Derived public key from private key");
-    debug!("Derived public key: {}", pubkey);
+impl WarpConfig {
+    #[instrument(level = "info", skip_all)]
+    pub async fn generate() -> Result<String, Box<dyn std::error::Error>> {
+        let mut config = WarpConfig::default();
+        config.generate_keys().await?;
+        config.fetch_configuration().await?;
+        config.format_config()
+    }
 
-    // Prepare API request
-    let client = reqwest::Client::new();
-    let api_url = "https://api.cloudflareclient.com/v0i1909051800/reg";
-    info!(url = api_url, "Preparing API request");
+    #[instrument(level = "info", skip(self))]
+    async fn generate_keys(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Generating new WireGuard keys");
+        self.private_key = wireguard_keys::Privkey::generate().to_base64();
+        debug!("Generated private key: {}", self.private_key);
 
-    // Create ISO 8601 timestamp (UTC)
-    let tos_time = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%S.000Z")
-        .to_string();
-    debug!("Generated TOS timestamp: {}", tos_time);
+        let privkey_obj: wireguard_keys::Privkey = self.private_key.parse().map_err(|e| {
+            error!("Failed to parse private key: {}", e);
+            e
+        })?;
+        self.public_key = privkey_obj.pubkey().to_base64();
+        info!("Derived public key from private key");
+        debug!("Derived public key: {}", self.public_key);
+        
+        Ok(())
+    }
 
-    // Build JSON payload
-    let payload = json!({
-        "install_id": "",
-        "tos": tos_time,
-        "key": pubkey,
-        "fcm_token": "",
-        "type": "ios",
-        "locale": "en_US"
-    });
-    debug!(payload = %payload, "Request payload");
+    #[instrument(level = "info", skip(self))]
+    async fn fetch_configuration(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let client = reqwest::Client::new();
+        let api_url = "https://api.cloudflareclient.com/v0i1909051800/reg";
+        info!(url = api_url, "Preparing API request");
 
-    // Create request headers
-    let mut headers = header::HeaderMap::new();
-    headers.insert("user-agent", header::HeaderValue::from_static(""));
-    headers.insert(
-        "content-type",
-        header::HeaderValue::from_static("application/json"),
-    );
+        let tos_time = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S.000Z")
+            .to_string();
+        debug!("Generated TOS timestamp: {}", tos_time);
 
-    // Instrumented HTTP request
-    let response = send_request(&client, api_url, headers, payload).await?;
+        let payload = json!({
+            "install_id": "",
+            "tos": tos_time,
+            "key": &self.public_key,
+            "fcm_token": "",
+            "type": "ios",
+            "locale": "en_US"
+        });
+        debug!(payload = %payload, "Request payload");
 
-    // Output response
-    let status = response.status();
-    let json_body = response.text().await?;
-    info!(%status, "Received API response");
-    debug!("Response body: {}", json_body);
+        let mut headers = header::HeaderMap::new();
+        headers.insert("user-agent", header::HeaderValue::from_static(""));
+        headers.insert(
+            "content-type",
+            header::HeaderValue::from_static("application/json"),
+        );
 
-    let response: Response = serde_json::from_str(&json_body)?;
-    
-    let private_key = privkey;
-    let address_v4 = response.result.config.interface.addresses.v4;
-    let address_v6 = response.result.config.interface.addresses.v6;
-    
-    let peer = response.result.config.peers.first()
-        .ok_or("No peers found in configuration")?;
-    let public_key = &peer.public_key;
-    let endpoint = &peer.endpoint.host;
+        let response = send_request(&client, api_url, headers, payload).await?;
+        let status = response.status();
+        let json_body = response.text().await?;
+        info!(%status, "Received API response");
+        debug!("Response body: {}", json_body);
 
-    let mut output = String::new();
-    
-    // Interface section
-    writeln!(&mut output, "[Interface]")?;
-    writeln!(&mut output, "PrivateKey = {}", private_key)?;
-    writeln!(&mut output, "Address = {}, {}", address_v4, address_v6)?;
-    writeln!(&mut output, "DNS = 1.1.1.1, 2606:4700:4700::1111, 1.0.0.1, 2606:4700:4700::1001")?;
-    
-    // Peer section
-    writeln!(&mut output, "\n[Peer]")?;
-    writeln!(&mut output, "PublicKey = {}", public_key)?;
-    writeln!(&mut output, "AllowedIPs = 0.0.0.0/0, ::/0")?;
-    writeln!(&mut output, "Endpoint = {}", endpoint)?;
+        let response: Response = serde_json::from_str(&json_body)?;
+        self.address_v4 = response.result.config.interface.addresses.v4;
+        self.address_v6 = response.result.config.interface.addresses.v6;
 
-    Ok(output)
+        let peer = response
+            .result
+            .config
+            .peers
+            .first()
+            .ok_or("No peers found in configuration")?;
+        self.peer_public_key = peer.public_key.clone();
+        self.endpoint = peer.endpoint.host.clone();
+
+        Ok(())
+    }
+
+    #[instrument(level = "info", skip(self))]
+    fn format_config(&self) -> Result<String, Box<dyn std::error::Error>> {
+        let mut output = String::new();
+
+        // Interface section
+        output.push_str("[Interface]\n");
+        output.push_str(&format!("PrivateKey = {}\n", self.private_key));
+        output.push_str(&format!("Address = {}, {}\n", self.address_v4, self.address_v6));
+        output.push_str("DNS = 1.1.1.1, 2606:4700:4700::1111, 1.0.0.1, 2606:4700:4700::1001\n");
+
+        // Peer section
+        output.push_str("\n[Peer]\n");
+        output.push_str(&format!("PublicKey = {}\n", self.peer_public_key));
+        output.push_str("AllowedIPs = 0.0.0.0/0, ::/0\n");
+        output.push_str(&format!("Endpoint = {}\n", self.endpoint));
+
+        Ok(output)
+    }
 }
 
 #[instrument(
